@@ -63,7 +63,7 @@ int main()
 //     cout<<img_c<<endl;
     
     
-    ceres::examples::PGMImage<double> image("../1.pgm");
+    ceres::examples::PGMImage<double> image("../imgs/1.pgm");
     
     image *= 1/255.0;
     
@@ -124,7 +124,7 @@ int main()
             ret.at<uchar>(x,y) = int(solution.Pixel(y, x));
         }
     }
-    cv::imwrite("../aa.png", ret);
+    cv::imwrite("../imgs/1-a.png", ret);
     
     
     return 0;

@@ -87,16 +87,87 @@ bool isPointInTri(mypoint p, mypoint p0, mypoint p1, mypoint p2, std::vector<flo
 }
 
 
-void renderTexture(//const trimesh::TriMesh* mesh,
-                   const vector<float>& colors,
-                   const vector<float>& textureCoordinates,
-                   const vector<int>& triangles,
-                   const vector<int>& triangles_uv,
-                   std::vector<float>& image,
-                   const int& h, const int& w, const int& c){
-    std::vector<float> depth_buffer(h*w, 0);
+
+void render_depth(const trimesh::TriMesh* mesh,
+                  const Eigen::Matrix4d& projMatrix,
+                  const int& img_h, const int& img_w,
+                  cv::Mat& depth_img)
+{
+    depth_img = cv::Mat(img_h, img_w, CV_32FC1, -99999);
+
+
+    int tri_p0_ind, tri_p1_ind, tri_p2_ind;
+    int tex_p0_ind, tex_p1_ind, tex_p2_ind;
+    mypoint p, p0, p1, p2;
+    vector<float> weight;
+    float x_min, x_max, y_min, y_max;
+    float p_depth, p0_depth, p1_depth, p2_depth;
     
-    size_t ntri = triangles_uv.size()/3;
+    mypoint p_uv, p0_uv, p1_uv, p2_uv;
+
+    for(size_t i = 0; i < mesh->faces.size(); i++)
+    {
+        tri_p0_ind = mesh->faces[i][0];
+        tri_p1_ind = mesh->faces[i][1];
+        tri_p2_ind = mesh->faces[i][2];
+        
+        proj_3D_to_2D(mesh->vertices[tri_p0_ind], projMatrix, p0.x, p0.y, p0_depth, img_h, img_w);
+        proj_3D_to_2D(mesh->vertices[tri_p1_ind], projMatrix, p1.x, p1.y, p1_depth, img_h, img_w);
+        proj_3D_to_2D(mesh->vertices[tri_p2_ind], projMatrix, p2.x, p2.y, p2_depth, img_h, img_w);
+
+        // bounding box of the triangle
+        x_min = max((int)ceil(min(p0.x, min(p1.x, p2.x))), 0);
+        x_max = min((int)floor(max(p0.x, max(p1.x, p2.x))), img_w - 1);
+
+        y_min = max((int)ceil(min(p0.y, min(p1.y, p2.y))), 0);
+        y_max = min((int)floor(max(p0.y, max(p1.y, p2.y))), img_h - 1);
+
+        if(x_min > x_max || y_min > y_max) continue;
+
+        for(int y = y_min; y <= y_max; y++)
+        {
+            for(int x = x_min; x <= x_max; x++)
+            {
+                p.x = x; p.y = y;
+
+                if(isPointInTri(p, p0, p1, p2, weight))
+                {
+                    p_depth = weight[0] * p0_depth + weight[1] * p1_depth + weight[2] * p2_depth;
+
+                    if(fabs(p_depth) < fabs(depth_img.at<float>(y, x)))
+                    {
+                        depth_img.at<float>(y, x) = p_depth;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+void render_texture_from_view(trimesh::TriMesh* mesh,
+                              const vector<float>& vertexCoordinates,
+                              const vector<float>& textureCoordinates,
+                              const vector<int>& vertexIndices,
+                              const vector<int>& textureIndices,
+                              const Eigen::Matrix4d& projMatrix,
+                              const cv::Mat& depth_img,
+                              const cv::Mat& image_view_space,
+                              const int& texture_size,
+                              cv::Mat& image_texture_space)
+{
+    int img_h = image_view_space.rows;
+    int img_w = image_view_space.cols;
+    int img_c = image_view_space.channels();
+    
+    float feature_size = mesh->feature_size();
+    
+    std::vector<float> depth_buffer(texture_size*texture_size, 0);
+    
+    image_texture_space = cv::Mat::zeros(texture_size, texture_size, CV_8UC3);
+    
+    size_t ntri = textureIndices.size()/3;
     
     int tri_p0_ind, tri_p1_ind, tri_p2_ind;
     mypoint p, p0, p1, p2;
@@ -106,26 +177,24 @@ void renderTexture(//const trimesh::TriMesh* mesh,
     
     for(size_t i = 0; i < ntri; i++)
     {
-        tri_p0_ind = triangles_uv[3*i];
-        tri_p1_ind = triangles_uv[3*i+1];
-        tri_p2_ind = triangles_uv[3*i+2];
-
+        tri_p0_ind = textureIndices[3*i];
+        tri_p1_ind = textureIndices[3*i+1];
+        tri_p2_ind = textureIndices[3*i+2];
 
         p0.x = textureCoordinates[3*tri_p0_ind]; p0.y = textureCoordinates[3*tri_p0_ind + 1]; 
         p1.x = textureCoordinates[3*tri_p1_ind]; p1.y = textureCoordinates[3*tri_p1_ind + 1]; 
         p2.x = textureCoordinates[3*tri_p2_ind]; p2.y = textureCoordinates[3*tri_p2_ind + 1]; 
 
-		
-		tri_p0_ind = triangles[3*i];
-		tri_p1_ind = triangles[3*i+1];
-        tri_p2_ind = triangles[3*i+2];
+		tri_p0_ind = vertexIndices[3*i];
+		tri_p1_ind = vertexIndices[3*i+1];
+        tri_p2_ind = vertexIndices[3*i+2];
 
         // bounding box of the triangle
         x_min = max((int)ceil(min(p0.x, min(p1.x, p2.x))), 0);
-        x_max = min((int)floor(max(p0.x, max(p1.x, p2.x))), w - 1);
+        x_max = min((int)floor(max(p0.x, max(p1.x, p2.x))), texture_size - 1);
 
         y_min = max((int)ceil(min(p0.y, min(p1.y, p2.y))), 0);
-        y_max = min((int)floor(max(p0.y, max(p1.y, p2.y))), h - 1);
+        y_max = min((int)floor(max(p0.y, max(p1.y, p2.y))), texture_size - 1);
 
         if(x_min > x_max || y_min > y_max) continue;
 
@@ -138,22 +207,28 @@ void renderTexture(//const trimesh::TriMesh* mesh,
 
                 if(isPointInTri(p, p0, p1, p2, weight))
                 {
-                   
-                    if(depth_buffer[y * w + x] != 1)
+                    if(depth_buffer[y * texture_size + x] != 1)
                     {
-                        for(int k = 0; k < c; k++) //for each color channel  RGB
+                        Eigen::Vector4d pt_h(0,0,0,1);
+                        for(int k = 0; k < img_c; k++) //for each color channel  RGB
                         {
-                            p0_color = colors[c*tri_p0_ind + k];
-                            p1_color = colors[c*tri_p1_ind + k];
-                            p2_color = colors[c*tri_p2_ind + k];
-					
-                            p_color = weight[0]*p0_color + weight[1]*p1_color + weight[2]*p2_color;
-
-                            image[c*(y*w+x) + k] = p_color;
+                            pt_h[k] = weight[0] * mesh->vertices[tri_p0_ind][k] + 
+                                      weight[1] * mesh->vertices[tri_p1_ind][k] + 
+                                      weight[2] * mesh->vertices[tri_p2_ind][k];
                         }
-
-                        depth_buffer[y * w + x] = 1;
-                        //cout<<depth_buffer[y * w + c]<<endl;
+                        
+                        Eigen::Vector4d uv_h = projMatrix * pt_h;
+                        double u = uv_h(0)/uv_h(2);  //(int)round()
+                        double v = uv_h(1)/uv_h(2);
+                        double d = uv_h(2);
+                        
+                        if(u < 0 || u >= img_w || v < 0 || v >= img_h)  continue;
+                        
+                        if(abs(d) > depth_img.at<float>(v, u) + feature_size) continue;
+                        
+                        image_texture_space.at<cv::Vec3b>(y, x) = image_view_space.at<cv::Vec3b>(v, u);
+                        
+                        depth_buffer[y * texture_size + x] = 1;
                     }
 
 
@@ -161,23 +236,21 @@ void renderTexture(//const trimesh::TriMesh* mesh,
             }
         }
         //process each triangle end
-
     }
 }
 
 
-// calculate the new normal map from the displacement map
-void renderNormalMap(const trimesh::TriMesh* mesh,
-                   const vector<float>& textureCoordinates,
-                   const vector<int>& vertexIndices,
-                   const vector<int>& textureIndices,
-                   const std::vector<Eigen::Matrix3d>& face_TBN,
-                   const std::vector<Eigen::Matrix3d>& face_TBN_norm,
-                   const cv::Mat& displacement_map,
-                   cv::Mat& normal_map_detailed,
-                   const int& h, const int& w, const int& c)
+// preprocess the normal map and position map
+void render_normal_position(const trimesh::TriMesh* mesh,
+                            const vector<float>& textureCoordinates,
+                            const vector<int>& vertexIndices,
+                            const vector<int>& textureIndices,
+                            const int& h, const int& w, const int& c,
+                            cv::Mat& normal_map, cv::Mat& position_map
+                           )
 {
-    normal_map_detailed = cv::Mat::zeros(h, w, CV_32FC3);
+    normal_map = cv::Mat::zeros(h, w, CV_32FC3);
+    position_map = cv::Mat::zeros(h, w, CV_32FC3);
     
     std::vector<float> depth_buffer(h*w, 0);
     
@@ -229,40 +302,26 @@ void renderNormalMap(const trimesh::TriMesh* mesh,
                     if(depth_buffer[y * w + x] != 1)
                     {
                         Eigen::Vector3d interpolate_normal;
+                        Eigen::Vector3d interpolate_position;
                         for(int k = 0; k < c; k++) //for each color channel  RGB
                         {
-                            p0_color = mesh->normals[tri_p0_ind][k]; 
-                            p1_color = mesh->normals[tri_p1_ind][k]; 
-                            p2_color = mesh->normals[tri_p2_ind][k]; 
-					
-                            interpolate_normal[k] = weight[0]*p0_color + weight[1]*p1_color + weight[2]*p2_color;
+                            interpolate_normal[k] = weight[0]*mesh->normals[tri_p0_ind][k] + 
+                                                    weight[1]*mesh->normals[tri_p1_ind][k] + 
+                                                    weight[2]*mesh->normals[tri_p2_ind][k];
+                                                    
+                            interpolate_position[k] = weight[0]*mesh->vertices[tri_p0_ind][k] + 
+                                                      weight[1]*mesh->vertices[tri_p1_ind][k] + 
+                                                      weight[2]*mesh->vertices[tri_p2_ind][k];
+                            
                         }
-                        
                         interpolate_normal.normalize();
                         
                         
-                        // displacement map
-                        double du = displacement_map.at<cv::Vec3f>(y, x)[0];
-                        double dv = displacement_map.at<cv::Vec3f>(y, x)[0];
-                        if(x >= 1) du = displacement_map.at<cv::Vec3f>(y, x)[0] - displacement_map.at<cv::Vec3f>(y, x-1)[0];
-                        if(y >= 1) dv = displacement_map.at<cv::Vec3f>(y, x)[0] - displacement_map.at<cv::Vec3f>(y-1, x)[0];
-                            
-                        Eigen::Vector3d duv(-4096*du, -4096*dv, 1.0);
-                        
-                        Eigen::Matrix3d tbn;
-                        tbn << face_TBN[i](0,0), face_TBN[i](0,1), interpolate_normal[0],
-                               face_TBN[i](1,0), face_TBN[i](1,1), interpolate_normal[1],
-                               face_TBN[i](2,0), face_TBN[i](2,1), interpolate_normal[2];
-                        
-                        Eigen::Vector3d n = tbn * face_TBN_norm[i] * duv;
-                        n.normalize();
-                        
                         for(int k=0; k<c; k++){
-                            //image[c*(y*w+x) + k] = n[k]; //interpolate_normal[k]
+                            normal_map.at<cv::Vec3f>(y,x)[k] = interpolate_normal[k]; //(n[k] + 1.0) / 2.0 * 255;  
+                            position_map.at<cv::Vec3f>(y,x)[k] = interpolate_position[k];
                             
-                            normal_map_detailed.at<cv::Vec3f>(y,x)[k] = n[k]; //(n[k] + 1.0) / 2.0 * 255;  
                         }
-
 
                         depth_buffer[y * w + x] = 1;
                     }
@@ -273,33 +332,31 @@ void renderNormalMap(const trimesh::TriMesh* mesh,
         //process each triangle 
 
     }
-    
     //cv::imwrite("debug.jpg", normalMap);
 }
 
 
 
 
-void renderImage(const trimesh::TriMesh* mesh,
-                 const vector<float>& vertices,
+void render_image(const trimesh::TriMesh* mesh,
                  const vector<float>& textureCoordinates,
-                 const vector<int>& vertexIndices,
                  const vector<int>& textureIndices,
+                 const Eigen::Matrix4d& projMatrix,
                  const std::vector<Eigen::Matrix3d>& face_TBN,
                  const std::vector<Eigen::Matrix3d>& face_TBN_norm,
                  const cv::Mat& diff_albedo,
                  const cv::Mat& spec_albedo,
                  const cv::Mat& roughness_map,
                  const cv::Mat& displacement_map,
-                 cv::Mat& normal_map_detailed,
-                 const std::vector<std::vector<double> >& sh_coeffs,
-                 std::vector<float>& image_buffer,
-                 const int& h, const int& w, const int& c)
+                 const int& img_h, const int& img_w, const int& img_c,
+                 cv::Mat& image)
 {
-    std::vector<float> depth_buffer(h * w, -1e10);
+    image = cv::Mat::zeros(img_h, img_w, CV_32FC3);
+    
+    std::vector<float> depth_buffer(img_h * img_w, -1e10);
     
     
-    size_t ntri = vertexIndices.size()/3;
+    size_t ntri = textureIndices.size()/3;
 
     int tri_p0_ind, tri_p1_ind, tri_p2_ind;
     int tex_p0_ind, tex_p1_ind, tex_p2_ind;
@@ -312,15 +369,19 @@ void renderImage(const trimesh::TriMesh* mesh,
 
     for(size_t i = 0; i < ntri; i++)
     {
-
-        tri_p0_ind = vertexIndices[3*i];
-        tri_p1_ind = vertexIndices[3*i+1];
-        tri_p2_ind = vertexIndices[3*i+2];
+        
+        tri_p0_ind = mesh->faces[i][0];
+        tri_p1_ind = mesh->faces[i][1];
+        tri_p2_ind = mesh->faces[i][2];
 
         // 2D projection
-        p0.x = vertices[3*tri_p0_ind]; p0.y = vertices[3*tri_p0_ind + 1]; p0_depth = vertices[3*tri_p0_ind + 2];
-        p1.x = vertices[3*tri_p1_ind]; p1.y = vertices[3*tri_p1_ind + 1]; p1_depth = vertices[3*tri_p1_ind + 2];
-        p2.x = vertices[3*tri_p2_ind]; p2.y = vertices[3*tri_p2_ind + 1]; p2_depth = vertices[3*tri_p2_ind + 2];
+//         p0.x = vertices[3*tri_p0_ind]; p0.y = vertices[3*tri_p0_ind + 1]; p0_depth = vertices[3*tri_p0_ind + 2];
+//         p1.x = vertices[3*tri_p1_ind]; p1.y = vertices[3*tri_p1_ind + 1]; p1_depth = vertices[3*tri_p1_ind + 2];
+//         p2.x = vertices[3*tri_p2_ind]; p2.y = vertices[3*tri_p2_ind + 1]; p2_depth = vertices[3*tri_p2_ind + 2];
+        
+        proj_3D_to_2D(mesh->vertices[tri_p0_ind], projMatrix, p0.x, p0.y, p0_depth, img_h, img_w);
+        proj_3D_to_2D(mesh->vertices[tri_p1_ind], projMatrix, p1.x, p1.y, p1_depth, img_h, img_w);
+        proj_3D_to_2D(mesh->vertices[tri_p2_ind], projMatrix, p2.x, p2.y, p2_depth, img_h, img_w);
         
         
         // uv coordinates
@@ -338,10 +399,10 @@ void renderImage(const trimesh::TriMesh* mesh,
 
         // bounding box of the triangle
         x_min = max((int)ceil(min(p0.x, min(p1.x, p2.x))), 0);
-        x_max = min((int)floor(max(p0.x, max(p1.x, p2.x))), w - 1);
+        x_max = min((int)floor(max(p0.x, max(p1.x, p2.x))), img_w - 1);
 
         y_min = max((int)ceil(min(p0.y, min(p1.y, p2.y))), 0);
-        y_max = min((int)floor(max(p0.y, max(p1.y, p2.y))), h - 1);
+        y_max = min((int)floor(max(p0.y, max(p1.y, p2.y))), img_h - 1);
 
         if(x_min > x_max || y_min > y_max) continue;
 
@@ -355,9 +416,9 @@ void renderImage(const trimesh::TriMesh* mesh,
                 {
                     p_depth = weight[0] * p0_depth + weight[1] * p1_depth + weight[2] * p2_depth;
 
-                    if(fabs(p_depth) < fabs(depth_buffer[y * w + x]))
+                    if(fabs(p_depth) < fabs(depth_buffer[y * img_w + x]))
                     {
-                        depth_buffer[y * w + x] = p_depth;
+                        depth_buffer[y * img_w + x] = p_depth;
                         
                         // the corresponding texture coordinate
                         p_uv.x = weight[0] * p0_uv.x + weight[1] * p1_uv.x + weight[2] * p2_uv.x;
@@ -371,7 +432,7 @@ void renderImage(const trimesh::TriMesh* mesh,
                         
                         // interpolate normal for smoothness
                         Eigen::Vector3d interpolate_normal;
-                        for(int k = 0; k < c; k++) //for each color channel RGB
+                        for(int k = 0; k < img_c; k++) //for each color channel RGB
                         {
                             interpolate_normal[k] = weight[0]*mesh->normals[tri_p0_ind][k] + 
                                                     weight[1]*mesh->normals[tri_p1_ind][k] + 
@@ -397,7 +458,7 @@ void renderImage(const trimesh::TriMesh* mesh,
                         //n = interpolate_normal;
                         n.normalize();
                         
-                        normal_map_detailed.at<cv::Vec3f>(p_uv.y, p_uv.x) = cv::Vec3f(n[0], n[1], n[2]);
+                        //normal_map_detailed.at<cv::Vec3f>(p_uv.y, p_uv.x) = cv::Vec3f(n[0], n[1], n[2]);
                         
                         // useless
                         double phi, theta;
@@ -439,8 +500,8 @@ void renderImage(const trimesh::TriMesh* mesh,
 //                             }
 //                             image_buffer[3 * (y * w + x) + k] = diff_color[k] * light_tmp;
                             
+                            image.at<cv::Vec3f>(y, x)[k] = ret[k];
                             
-                            image_buffer[3 * (y * w + x) + k] = ret[k];
                         }
                     }
                 }

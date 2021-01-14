@@ -407,12 +407,12 @@ int main(int argc, char** argv)
     draw_region(rgba, width, height, regions);
 
     // draw a marker into image for each position
-//     size_t i = 0;
-//     for (auto l = lights.begin(); l != lights.end(); ++l)
-//     {
-//         //std::cout << "Light " << i++ << ": (" << l->x << ", " << l->y << ")" << std::endl;
-//         draw(rgba, width, height, *l);
-//     }
+    size_t i = 0;
+    for (auto l = lights.begin(); l != lights.end(); ++l)
+    {
+        //std::cout << "Light " << i++ << ": (" << l->x << ", " << l->y << ")" << std::endl;
+        draw(rgba, width, height, *l);
+    }
 
     // save image with marked samples
     std::vector<unsigned char> conv;
@@ -421,7 +421,7 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < width * height * 4; ++i)
         conv[i] = static_cast<unsigned char>(rgba[i]*255);
 
-    stbi_write_bmp("test.bmp", width, height, 4, &conv[0]);
+    stbi_write_bmp("median_cut.bmp", width, height, 4, &conv[0]);
 
     return 0;
 }

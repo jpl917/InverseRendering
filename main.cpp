@@ -22,11 +22,11 @@ int main(){
     // 2. load mesh topology information
     std::vector<float> vertexCoordinates, textureCoordinates;
     std::vector<int>   vertexIndices, textureIndices;
-    loadMesh("../maya_render/model.obj",vertexCoordinates, textureCoordinates, vertexIndices, textureIndices);
+    load_mesh("../maya_render/model.obj",vertexCoordinates, textureCoordinates, vertexIndices, textureIndices);
 
     // 3. load camera information
     std::vector<Eigen::Matrix4d> cam_K, cam_T, cam_P;
-    loadCamera("../maya_render/cam.txt", cam_K, cam_T, cam_P);
+    load_camera("../maya_render/cam.txt", cam_K, cam_T, cam_P);
     
     // 4. load reflectance maps
     cv::Mat diff_albedo = cv::imread("../maya_render/Textures/Head_Diffuse_Unlit.exr", cv::IMREAD_UNCHANGED);
@@ -38,7 +38,7 @@ int main(){
     // spherical harmonics test (not use)
     std::vector<std::vector<double> > sh_coeffs(3);
     cal_SH_from_envmap("../maya_render/env_map/indoor.JPG", sh_coeffs, SH_ORDER);
-    
+
     
     // render params
     int texture_size = diff_albedo.rows; 
@@ -46,9 +46,7 @@ int main(){
     int img_h = 1920;
     int img_w = 1080;
     int img_c = 3;
-    // render view
-    int view_idx = 0;
-    
+
 
     // calcuate the tangent space matrix for each face 
     // to fuse displacement map
@@ -62,63 +60,58 @@ int main(){
      * render detailed normal map (4096 * 4096) 
      * fusing displacement map
      * ************************************************/
-//     renderNormalMap(themesh, textureCoordinates, vertexIndices, textureIndices, 
-//                     face_TBN, face_TBN_norm, displacement_map, normal_map_detailed, texture_size, texture_size, 3);
+    cv::Mat normal_map   = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
+    cv::Mat position_map = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
+    render_normal_position(themesh, textureCoordinates, vertexIndices, textureIndices,texture_size, texture_size, 3,  
+                        normal_map, position_map);
     
-
+    //cv::imwrite("render/normal_map.exr", normal_map);
+    //cv::imwrite("render/position_map.exr", position_map);
+    //visualize_normal_map(normal_map, "normal_map.jpg");
+    //visualize_position_map(position_map, "position_map.jpg");
+    
+    
     
     /**************************************************
-     * render single view
+     * render for each view
      * ***********************************************/
-    // projection on view
-    std::vector<float> vertices;
-    for(size_t i=0; i<verts.size(); i++){
-        trimesh::point p = verts[i];
-        Eigen::Vector4d pt_w(p.x, p.y, p.z, 1);
-        Eigen::Vector4d pt_c = cam_P[view_idx] * pt_w;
-
-        vertices.push_back(pt_c[0]/pt_c[2]);
-        vertices.push_back(pt_c[1]/pt_c[2]);
-        vertices.push_back(pt_c[2]);
+    int view_idx = 6;
+    for(int view_idx = 0; view_idx < 12; view_idx++){
+        //image idx
+        char buff[100];
+        snprintf(buff, sizeof(buff), "%04d", view_idx+1);
+        std:string view_idx_str(buff);
+        cout<<"use view: "<<view_idx_str<<endl;
+        
+        
+        // depth map
+        cv::Mat depth_img;
+        render_depth(themesh, cam_P[view_idx], img_h, img_w, depth_img);
+        visualize_depth_map(depth_img, "render/depth_"+view_idx_str+".jpg");
+        
+        
+        // convert image to texture space
+        cv::Mat image_view_space = cv::imread("../maya_render/Image/inverse_rendering_1_"+view_idx_str+".png", cv::IMREAD_UNCHANGED);
+        cv::Mat image_texture_space;
+        render_texture_from_view(themesh, vertexCoordinates, textureCoordinates, vertexIndices, textureIndices,
+                                cam_P[view_idx], depth_img, image_view_space, texture_size, image_texture_space);
+        cv::imwrite("render/image_texture_space_"+view_idx_str+".jpg", image_texture_space);
+        
+        
+        /**************************************************
+        * render single view
+        * ***********************************************/
+        cv::Mat render_result;
+        //cv::Mat normal_map_detailed = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
+        render_image(themesh, textureCoordinates, textureIndices, cam_P[view_idx], face_TBN, face_TBN_norm,
+                    diff_albedo, spec_albedo, roughness_map, displacement_map, 
+                    img_h, img_w, img_c, render_result);
+        
+        visualize_render_image(render_result, "render/render_"+view_idx_str+".jpg");
+        cv::imwrite("render/render_"+view_idx_str+"_origin.jpg", image_view_space);
     }
     
-    std::vector<float> image_buffer(img_h * img_w * 3, 0.0);
-    cv::Mat normal_map_detailed = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
-    renderImage(themesh, vertices, textureCoordinates, vertexIndices, textureIndices, 
-                face_TBN, face_TBN_norm,
-                diff_albedo, spec_albedo, roughness_map, displacement_map, normal_map_detailed,
-                sh_coeffs, image_buffer, img_h, img_w, img_c);
     
-    
-    // 1. visualize detailed normal map
-//     cv::Mat normal_map_detailed_viz = cv::Mat::zeros(texture_size, texture_size, CV_8UC3);
-//     for(int i=0; i<texture_size; i++){
-//         for(int j=0; j<texture_size; j++){
-//             cv::Vec3f val = normal_map_detailed.at<cv::Vec3f>(i,j);
-//             if( val[0] == 0 && val[1] == 0 && val[2] == 0) continue;
-//             
-//             normal_map_detailed_viz.at<cv::Vec3b>(i,j) = cv::Vec3b(
-//                                                     (val[0] + 1.0) / 2.0 * 255, 
-//                                                     (val[1] + 1.0) / 2.0 * 255, 
-//                                                     (val[2] + 1.0) / 2.0 * 255);
-//         }
-//     }
-//     cv::imwrite("normal_map_detailed.jpg", normal_map_detailed_viz);
-//     cv::imwrite("normal_map_detailed.exr", normal_map_detailed);
-    
-    
-    // 2. render single view
-    cv::Mat img = cv::Mat(img_h, img_w, CV_8UC3);
-    for(int i=0; i<img_h; i++){
-        for(int j=0; j<img_w; j++){
-            cv::Vec3b val(0,0,0);
-            for(int k=0; k<3; k++){
-                val[k] = 255 * pow(image_buffer[3*(i*img_w+j)+k], 1/2.2);
-            }
-            img.at<cv::Vec3b>(i,j) = val;
-        }
-    }
-    cv::imwrite("render.jpg", img);
     return 0;
     
 }

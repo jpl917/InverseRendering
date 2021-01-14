@@ -63,3 +63,7 @@ target_link_libraries(main ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Trimesh2_LIB_DIRS
 
 add_executable(median_cut median_cut.cpp)
 target_link_libraries(median_cut ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Trimesh2_LIB_DIRS} ${PROJECT_NAME})
+
+
+add_executable(voronoi voronoi.cpp)
+target_link_libraries(voronoi ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Trimesh2_LIB_DIRS} ${PROJECT_NAME})
