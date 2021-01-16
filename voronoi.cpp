@@ -101,10 +101,10 @@ int main( int argc, char** argv)
 
     // Read in the points from a text file
     srand((unsigned)time(0));
-    for(int i=0; i<size.height; i+=size.height/5){
-        for(int j=0; j<size.width; j+=size.width/10){
-            int tmp_i = i + int(rand() & 100);
-            int tmp_j = j + int(rand() & 100);
+    for(int i=0; i<size.height; i+=size.height/30){
+        for(int j=0; j<size.width; j+=size.width/30){
+            int tmp_i = i + 0;//int(rand() & 100);
+            int tmp_j = j + 0;//int(rand() & 100);
             if(tmp_i >= size.height) tmp_i = size.height-1;
             if(tmp_j >= size.width)  tmp_j = size.width-1;
             points.push_back(cv::Point2f(tmp_j, tmp_i));
@@ -147,6 +147,8 @@ int main( int argc, char** argv)
     //imshow( win_delaunay, img);
     imshow( win_voronoi, img_voronoi);
     waitKey(0);
+    
+    cv::imwrite("voronoi.jpg", img_voronoi);
 
     return 0;
 }

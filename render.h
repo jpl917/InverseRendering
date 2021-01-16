@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "spherical_harmonics.h"
 #include "cook_torrance.h"
+#include "median_cut.h"
 
 // point (x,y) 
 class mypoint
@@ -336,8 +337,6 @@ void render_normal_position(const trimesh::TriMesh* mesh,
 }
 
 
-
-
 void render_image(const trimesh::TriMesh* mesh,
                  const vector<float>& textureCoordinates,
                  const vector<int>& textureIndices,
@@ -348,6 +347,8 @@ void render_image(const trimesh::TriMesh* mesh,
                  const cv::Mat& spec_albedo,
                  const cv::Mat& roughness_map,
                  const cv::Mat& displacement_map,
+                 const std::vector<float3>& lights_pos,
+                 const std::vector<float3>& lights_color,
                  const int& img_h, const int& img_w, const int& img_c,
                  cv::Mat& image)
 {
@@ -460,36 +461,31 @@ void render_image(const trimesh::TriMesh* mesh,
                         
                         //normal_map_detailed.at<cv::Vec3f>(p_uv.y, p_uv.x) = cv::Vec3f(n[0], n[1], n[2]);
                         
-                        // useless
-                        double phi, theta;
-                        cart2sph(n[0], n[1], n[2], phi, theta);
-                        std::vector<double> coeff;
-                        sh_basis(phi, theta, coeff, SH_ORDER);
+                        // spherical harmonics [useless]
+//                         double phi, theta;
+//                         cart2sph(n[0], n[1], n[2], phi, theta);
+//                         std::vector<double> coeff;
+//                         sh_basis(phi, theta, coeff, SH_ORDER);
                         
                         
-
-                        Eigen::Vector3d ret(0,0,0);
-                        {
-                        
-                            Eigen::Vector3d l(10,10,10);
-                            Eigen::Vector3d v(0,0,100);
+                        Eigen::Vector3d ret(0,0,0);//rgb
+                        for(int i=0; i<lights_pos.size(); i++){ //
+                            float3 light_pos = lights_pos[i];
+                            float3 light_color = lights_color[i];
+                            Eigen::Vector3d l= Eigen::Vector3d(light_pos.x, light_pos.y, light_pos.z);
+                            Eigen::Vector3d v(0,0,1);
                             l.normalize();
                             v.normalize();
-                            ret = disney(l, v, n, d, r, s);
+                            Eigen::Vector3d tmp = disney(l, v, n, d, r, s);
+                            ret[0] += tmp[0] * light_color.x;
+                            ret[1] += tmp[1] * light_color.y;
+                            ret[2] += tmp[2] * light_color.z;
                         }
                         
-                        {
-                            Eigen::Vector3d l(-1,0,0);
-                            Eigen::Vector3d v(0,0,100);
-                            l.normalize();
-                            v.normalize();
-                            ret += 0.2 * disney(l, v, n, d, r, s);
-                        }
                         
-                        for(int k=0; k<3; k++){
-                            if(ret[k] > 1.0) ret[k] = 1.0;
-                            if(ret[k] < 0.0) ret[k] = 0.0;
-                        }
+                        ret /= lights_pos.size();
+                        ret *= 4;
+                        
                         
                         
                         // spherical hamonics lighting
@@ -500,7 +496,7 @@ void render_image(const trimesh::TriMesh* mesh,
 //                             }
 //                             image_buffer[3 * (y * w + x) + k] = diff_color[k] * light_tmp;
                             
-                            image.at<cv::Vec3f>(y, x)[k] = ret[k];
+                            image.at<cv::Vec3f>(y, x)[k] = clamp(ret[k]);
                             
                         }
                     }

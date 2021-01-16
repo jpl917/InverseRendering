@@ -31,6 +31,9 @@
 // A Median Cut Algorithm for Light Probe Sampling
 // http://gl.ict.usc.edu/Research/MedianCut/
 
+#ifndef MEDIAN_CUT_H
+#define MEDIAN_CUT_H
+
 #include <iostream>
 #include <cstdio>
 #include <memory>
@@ -49,9 +52,17 @@
 
 using namespace std;
 
+
 struct float2
 {
     float x, y;
+};
+
+struct float3
+{
+    float x, y, z;
+    float3():x(0.), y(0.), z(0.){}
+    float3(float _x, float _y, float _z): x(_x), y(_y), z(_z){}
 };
 
 template<typename T>
@@ -288,10 +299,9 @@ void draw_region(float* rgba, int width, int height, const std::vector<sat_regio
         maximum_lux = regions[i].sum_ > maximum_lux ? regions[i].sum_ : maximum_lux;
     }
     
-    
+    cv::Mat light_color = cv::Mat::zeros(height, width, CV_32FC3);
     for (size_t i = 0; i < regions.size(); ++i)
     {
-        
         // the sum of lux for each region
         for(size_t p = 0; p < regions[i].h_; p++){
             for(size_t q = 0; q < regions[i].w_; q++){
@@ -307,7 +317,6 @@ void draw_region(float* rgba, int width, int height, const std::vector<sat_regio
 //                 rgba[ci + 1] = regions[i].sum_ / maximum_lux;
 //                 rgba[ci + 2] = regions[i].sum_ / maximum_lux;
 //                 rgba[ci + 3] = 1.f;
-
             }
         }
         
@@ -330,6 +339,80 @@ void draw_region(float* rgba, int width, int height, const std::vector<sat_regio
             draw(rgba, width, height, new_pt);
         }
     }
+    
+}
+
+
+void calculate_light_color(float* rgba, int width, int height, 
+                           const std::vector<sat_region>& regions,
+                           std::vector<float3>& lights_color)
+{
+    
+    lights_color.resize(regions.size());
+    cv::Mat lights_color_viz = cv::Mat::zeros(height, width, CV_32FC3);
+    
+    int m = width*height*4;  //maximum length of the image
+    for (size_t i = 0; i < regions.size(); ++i)
+    {
+        lights_color[i].x = 0.0;
+        lights_color[i].y = 0.0;
+        lights_color[i].z = 0.0;
+        
+        int count = regions[i].h_ * regions[i].w_;
+        count = (count == 0 ? 1: count);
+        // the sum of lux for each region
+        for(size_t p = 0; p < regions[i].h_; p++){
+            for(size_t q = 0; q < regions[i].w_; q++){
+                float2 new_pt;
+                new_pt.x = regions[i].x_ + q;
+                new_pt.y = regions[i].y_ + p;
+                
+                int ci = std::min<int>((new_pt.y * width + new_pt.x) * 4, m);
+                
+                if (ci < 0 || ci > m) continue;
+                
+                lights_color[i].x += rgba[ci+0];
+                lights_color[i].y += rgba[ci+1];
+                lights_color[i].z += rgba[ci+2];
+            }
+        }
+        
+        lights_color[i].x /= count;
+        lights_color[i].y /= count;
+        lights_color[i].z /= count;
+        
+        //if(lights_color[i].x < 0.6) continue;
+        
+        
+        for(size_t p = 0; p < regions[i].h_; p++){
+            for(size_t q = 0; q < regions[i].w_; q++){
+                lights_color_viz.at<cv::Vec3f>(regions[i].y_ + p, regions[i].x_ + q) = cv::Vec3f(
+                                                            lights_color[i].z, lights_color[i].y, lights_color[i].x);
+            }
+        }
+        
+        
+        // vertical
+//         for(int t = 0; t < regions[i].h_; t++)
+//         {
+//             float2 new_pt;
+//             new_pt.x = regions[i].x_;
+//             new_pt.y = regions[i].y_ + t;
+//             draw(rgba, width, height, new_pt);
+//         }
+//         
+//         // horizonal
+//         for(int t = 0; t < regions[i].w_; t++)
+//         {
+//             float2 new_pt;
+//             new_pt.x = regions[i].x_ + t;
+//             new_pt.y = regions[i].y_;
+//             draw(rgba, width, height, new_pt);
+//         }
+    }
+    
+    cv::imwrite("lights_color_viz.jpg", 255 * lights_color_viz);
+    
 }
 
 
@@ -345,51 +428,57 @@ void create_lights(const std::vector<sat_region>& regions, std::vector<float2>& 
 }
 
 
-int main(int argc, char** argv)
-{
-    std::string filename;
-    if (argc < 2)
-    {
-        std::cerr << "Use " << argv[0] << " filename" << std::endl;
-        filename = "../maya_render/env_map/hdr/4.hdr";
-        //return 1;
-    }else filename = argv[1];
+// https://ww2.mathworks.cn/help/matlab/ref/sph2cart.html
+// azimuth: x-y plane 方位角
+// elevation:         仰角
+float3 sph2cart(double azimuth, double elevation, double radius){  
+//     double x = radius * cos(elevation) * cos(azimuth);
+//     double y = radius * cos(elevation) * sin(azimuth);
+//     double z = radius * sin(elevation);
+    
+    double x = radius * cos(elevation) * cos(azimuth);
+    double y = radius * cos(elevation) * sin(azimuth);
+    double z = radius * sin(elevation);
+    
+    return float3(x, y, z);
+}
 
+
+int estimate_light_source(const std::string& filename, 
+                          std::vector<float3>& lights_pos, 
+                          std::vector<float3>& lights_color) 
+{
+    cout<<"median_cut: "<<filename<<endl;
     // load image
+    float* rgba;
     int width, height, nc;
-    
-//     float* rgba = stbi_loadf(filename.c_str(), &width, &height, &nc, 4);
-//     if (stbi_failure_reason())
-//     {
-//         std::cerr << "stbi: " << stbi_failure_reason() << std::endl;
-//         return 1;
-//     }
-    
-    // load jpg
+    std::string postfix = filename.substr(filename.find_last_of(".") + 1);
+    if(postfix == "hdr"){
+        rgba = stbi_loadf(filename.c_str(), &width, &height, &nc, 4);
+        if (stbi_failure_reason())
+        {
+            std::cerr << "stbi: " << stbi_failure_reason() << std::endl;
+            return 1;
+        }
+    }else{
+        cv::Mat img = cv::imread(filename, cv::IMREAD_UNCHANGED);
+        img.convertTo(img, CV_32FC3, 1.0/255, 0); 
+        width = img.cols;
+        height = img.rows;
+        nc = img.channels();
         
-    filename = "../maya_render/env_map/env-log.jpg";
-    cv::Mat img = cv::imread(filename, cv::IMREAD_UNCHANGED);
-    img.convertTo(img, CV_32FC3, 1.0/255, 0); 
-    width = img.cols;
-    height = img.rows;
-    nc = img.channels();
-    cout<<width<<" "<<height<<" "<<nc<<endl;
-    
-    float* rgba = new float[width * height * 4];
-    for(int i=0; i<height; i++){
-        for(int j=0; j<width; j++){
-            for(int k=0; k<nc; k++){
-                rgba[4*(i*width+j)+k] = img.at<cv::Vec3f>(i,j)[nc-1-k];
+        rgba = new float[width * height * 4];
+        for(int i=0; i<height; i++){
+            for(int j=0; j<width; j++){
+                for(int k=0; k<nc; k++){
+                    rgba[4*(i*width+j)+k] = img.at<cv::Vec3f>(i,j)[nc-1-k];
+                }
+                rgba[4*(i*width+j)+3] = 1.0;
             }
-            rgba[4*(i*width+j)+3] = 1.0;
         }
     }
     
-//     float* rgba = img.ptr<float>(0);
-// //     float*  = new float(width * height * nc);
-// //     memcpy(rgba, data, width * height * nc);
-//     for(int i=0; i<10; i++)cout<<rgba[i]<<endl;
-
+    
     // create summed area table of luminance image
     summed_area_table lum_sat;
     lum_sat.create_lum(rgba, width, height, 4);
@@ -400,28 +489,63 @@ int main(int argc, char** argv)
     std::vector<sat_region> regions;
     median_cut(lum_sat, n, regions); // max 2^n cuts
 
+
+    
     // create 2d positions from regions
     std::vector<float2> lights;
     create_lights(regions, lights);
+    //draw_region(rgba, width, height, regions);
 
-    draw_region(rgba, width, height, regions);
+    //std::vector<float3> lights_color;
+    calculate_light_color(rgba, width, height, regions, lights_color);
+    
 
+    
     // draw a marker into image for each position
-    size_t i = 0;
-    for (auto l = lights.begin(); l != lights.end(); ++l)
+    ofstream fout("debug.obj");
+    
+    for (size_t i = 0; i < lights.size(); i++)
     {
-        //std::cout << "Light " << i++ << ": (" << l->x << ", " << l->y << ")" << std::endl;
-        draw(rgba, width, height, *l);
+        std::cout << "Light " << i << ": (" << lights[i].x << ", " << lights[i].y << ")   ("
+                  <<lights_color[i].x<<" "<<lights_color[i].y<<" "<<lights_color[i].z<<")"<<endl;
+        //draw(rgba, width, height, lights[i]);
+        
+        lights[i].x = 1.0 / 4 * width + lights[i].x ;
+        lights[i].y = 0.5 * height - lights[i].y ;
+        
+        float3 cart = sph2cart(lights[i].x / width * 2 * PI, lights[i].y / height * PI, 30.0);
+        
+        
+        fout<<"v "<<cart.x<<" "<<cart.z<<" "<<-cart.y << " "
+            <<lights_color[i].x<<" "<<lights_color[i].y<<" "<<lights_color[i].z<<endl;
+            
+            
+        lights_pos.push_back(float3(cart.x, cart.z, -cart.y));
     }
-
+    fout.close();
+    
     // save image with marked samples
-    std::vector<unsigned char> conv;
-    conv.resize(width*height*4);
-
-    for (size_t i = 0; i < width * height * 4; ++i)
-        conv[i] = static_cast<unsigned char>(rgba[i]*255);
-
-    stbi_write_bmp("median_cut.bmp", width, height, 4, &conv[0]);
-
+    cv::Mat viz = cv::Mat::zeros(height, width, CV_8UC3);
+    for(int i=0; i<height; i++){
+        for(int j=0; j<width; j++){
+            for(int k=0; k<3; k++)
+                viz.at<cv::Vec3b>(i,j)[k] = rgba[4 * (i * width + j) + 2 - k] * 255;
+        }
+    }
+    cv::imwrite("median_cut_viz.jpg", viz);
+    
+//     
+//     std::vector<unsigned char> conv;
+//     conv.resize(width*height*4);
+// 
+//     for (size_t i = 0; i < width * height * 4; ++i)
+//         conv[i] = static_cast<unsigned char>(rgba[i]*255);
+// 
+//     stbi_write_bmp("median_cut.bmp", width, height, 4, &conv[0]);
+    
+    
     return 0;
 }
+
+
+#endif

@@ -7,12 +7,14 @@
 
 #include "utils.h"
 #include "render.h"
+#include "median_cut.h"
 
 using namespace std;
 
 
 int main(){
     
+   
     // 1. load mesh
     trimesh::TriMesh* themesh = trimesh::TriMesh::read("../maya_render/model.obj");
     std::vector<trimesh::point> verts = themesh->vertices;
@@ -34,11 +36,16 @@ int main(){
     cv::Mat roughness_map = cv::imread("../maya_render/Textures/Head_Roughness.exr", cv::IMREAD_UNCHANGED);
     cv::Mat displacement_map = cv::imread("../maya_render/Textures/Head_Displacement.exr", cv::IMREAD_UNCHANGED);
     
-    
     // spherical harmonics test (not use)
-    std::vector<std::vector<double> > sh_coeffs(3);
-    cal_SH_from_envmap("../maya_render/env_map/indoor.JPG", sh_coeffs, SH_ORDER);
-
+//     std::vector<std::vector<double> > sh_coeffs(3);
+//     cal_SH_from_envmap("../maya_render/env_map/indoor.JPG", sh_coeffs, SH_ORDER);
+    
+    // median_cut 
+    std::vector<float3> lights_pos;
+    std::vector<float3> lights_color;
+    estimate_light_source("../maya_render/env_map/env-log.jpg", lights_pos, lights_color);  //outdoor.hdr
+    //return 0;
+    
     
     // render params
     int texture_size = diff_albedo.rows; 
@@ -75,8 +82,7 @@ int main(){
     /**************************************************
      * render for each view
      * ***********************************************/
-    int view_idx = 6;
-    for(int view_idx = 0; view_idx < 12; view_idx++){
+    for(int view_idx = 0; view_idx < 1; view_idx++){
         //image idx
         char buff[100];
         snprintf(buff, sizeof(buff), "%04d", view_idx+1);
@@ -87,7 +93,7 @@ int main(){
         // depth map
         cv::Mat depth_img;
         render_depth(themesh, cam_P[view_idx], img_h, img_w, depth_img);
-        visualize_depth_map(depth_img, "render/depth_"+view_idx_str+".jpg");
+        //visualize_depth_map(depth_img, "render/depth_"+view_idx_str+".jpg");
         
         
         // convert image to texture space
@@ -95,7 +101,7 @@ int main(){
         cv::Mat image_texture_space;
         render_texture_from_view(themesh, vertexCoordinates, textureCoordinates, vertexIndices, textureIndices,
                                 cam_P[view_idx], depth_img, image_view_space, texture_size, image_texture_space);
-        cv::imwrite("render/image_texture_space_"+view_idx_str+".jpg", image_texture_space);
+        //cv::imwrite("render/image_texture_space_"+view_idx_str+".jpg", image_texture_space);
         
         
         /**************************************************
@@ -105,6 +111,7 @@ int main(){
         //cv::Mat normal_map_detailed = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
         render_image(themesh, textureCoordinates, textureIndices, cam_P[view_idx], face_TBN, face_TBN_norm,
                     diff_albedo, spec_albedo, roughness_map, displacement_map, 
+                    lights_pos, lights_color,
                     img_h, img_w, img_c, render_result);
         
         visualize_render_image(render_result, "render/render_"+view_idx_str+".jpg");

@@ -61,10 +61,10 @@ Eigen::Vector3d disney(Eigen::Vector3d l, Eigen::Vector3d v,
     Eigen::Vector3d h = (l + v) / 2.0;
     h.normalize();
     
-    double NoH = maximum(n.dot(h), 0.0);
-    double NoL = maximum(n.dot(l), 0.0);
-    double NoV = maximum(n.dot(v), 0.0);
-    double VoH = maximum(v.dot(h), 0.0);
+    double NoH = maximum(n.dot(h), 1e-8);
+    double NoL = maximum(n.dot(l), 1e-8);
+    double NoV = maximum(n.dot(v), 1e-8);
+    double VoH = maximum(v.dot(h), 1e-8);
     
     Eigen::Vector3d f_d = d / PI;
     

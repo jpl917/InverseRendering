@@ -124,16 +124,18 @@ void cal_SH_from_envmap(const std::string& filename, std::vector<std::vector<dou
     int h = img.rows;
     int w = img.cols;
     
-    vector<double> theta(h), phi(w);
-    for(int i=0; i<h; i++) theta[i] = (i + 0.5) * PI / h;
+    // phi: azimuth angle
+    // theta: polar angle
+    vector<double> phi(w), theta(h);
     for(int i=0; i<w; i++) phi[i] = (i + 0.5) * 2 * PI / w;
+    for(int i=0; i<h; i++) theta[i] = (i + 0.5) * PI / h;
     
-    vector<double> w_theta(h), w_phi(w);
-    for(int i=0; i<h; i++) w_theta[i] = cos(i*PI/h) - cos((i+1)*PI/h);
+    vector<double> w_phi(w), w_theta(h);
     for(int i=0; i<w; i++) w_phi[i] = (i+1)*2*PI/w - i*2*PI/w;
+    for(int i=0; i<h; i++) w_theta[i] = cos(i*PI/h) - cos((i+1)*PI/h);
     
     
-    std::vector<double> r_coeff(order2, 0.0),g_coeff(order2, 0.0), b_coeff(order2, 0.0);
+    std::vector<double> r_coeff(order2, 0.0), g_coeff(order2, 0.0), b_coeff(order2, 0.0);
     
     //int offset = w/4;
     
