@@ -321,7 +321,6 @@ void render_normal_position(const trimesh::TriMesh* mesh,
                         for(int k=0; k<c; k++){
                             normal_map.at<cv::Vec3f>(y,x)[k] = interpolate_normal[k]; //(n[k] + 1.0) / 2.0 * 255;  
                             position_map.at<cv::Vec3f>(y,x)[k] = interpolate_position[k];
-                            
                         }
 
                         depth_buffer[y * w + x] = 1;
