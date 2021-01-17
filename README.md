@@ -12,12 +12,16 @@ This project aims to recover the facial reflectance (diffuse albedo, specular al
 ### Spherical harmonics estimation 
 
 <p align="center">
+<img src="imgs/sh/indoor.JPG" alt="Sample"  width="300" height="121"><img src="imgs/sh/indoor_approximate3.jpg" alt="Sample"  width="300" height="121">
+
+From left to right: environment map, 3 order spherial harmonics approximation.
+
 
 ### Median-cut to approximate the environment light
 <p align="center">
-<img src="imgs/sh/indoor.JPG" alt="Sample"  width="300" height="121">
+<img src="imgs/median_cut_viz.jpg" alt="Sample"  width="300" height="121"><img src="imgs/lights_color_viz.jpg" alt="Sample"  width="300" height="121">
 
-From left to right: environment map, 3 order spherial harmonics approximation.
+From left to right: environment map, 256 lights estimated using median-cut.
 
 
 ### Estimate detailed normal map from displacement map
@@ -32,10 +36,11 @@ From left to right: normal map from geometry, high-resolution normal map fusing 
 <p align="center">
 <img src="imgs/render.jpg" alt="Sample"  width="270" height="480"><img src="imgs/render_diff.jpg" alt="Sample"  width="270" height="480"><img src="imgs/render_spec.jpg" alt="Sample"  width="270" height="480">
 
-From left to right: render, diffuse, specular.
+From left to right: render facial image, diffuse component, specular component.
 
 ### Inverse Rendering Optimization
 
+Using ceres to solve.
 
 ### Reference
 1. Gotardo et al. Practical Dynamic Facial Appearance Modeling and Acquisition. ACM Transactions on Graphics. 2018.
