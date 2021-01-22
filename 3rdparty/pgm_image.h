@@ -1,3 +1,5 @@
+#ifndef CERES_EXAMPLES_PGM_IMAGE_H_
+#define CERES_EXAMPLES_PGM_IMAGE_H_
 // Ceres Solver - A fast non-linear least squares minimizer
 // Copyright 2015 Google Inc. All rights reserved.
 // http://ceres-solver.org/
@@ -29,9 +31,6 @@
 // Author: strandmark@google.com (Petter Strandmark)
 //
 // Simple class for accessing PGM images.
-
-#ifndef CERES_EXAMPLES_PGM_IMAGE_H_
-#define CERES_EXAMPLES_PGM_IMAGE_H_
 
 #include <algorithm>
 #include <cstring>

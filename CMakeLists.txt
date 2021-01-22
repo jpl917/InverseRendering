@@ -6,8 +6,8 @@ find_package(CUDA REQUIRED)
 
 SET(CMAKE_BUILD_TYPE Release)
 
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O3 -march=native ")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3 -march=native")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O3 -march=native ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3 -march=native")
 
 # Check C++11 or C++0x support
 include(CheckCXXCompilerFlag)
@@ -27,6 +27,7 @@ endif()
 
 # include .h headers
 include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/3rdparty/)
 include_directories(${PROJECT_SOURCE_DIR}/3rdparty/stb)
 
 # Ceres solver
@@ -50,18 +51,27 @@ include_directories(${Trimesh2_INCLUDE_DIRS})
 
 add_library(${PROJECT_NAME} STATIC 
 3rdparty/stb/stb_image.c
+render_utils.cpp
+cook_torrance.cpp
+data_loader.cpp
+spherical_harmonics.cpp
+visualizer.cpp
 )
 
-add_executable(test_ceres test_ceres.cpp)
-target_link_libraries(test_ceres ${OpenCV_LIBS} ${CERES_LIBRARIES})
-
-add_executable(test_sh test_sh.cpp)
-target_link_libraries(test_sh ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME}
+${OpenCV_LIBS} 
+${Trimesh2_LIB_DIRS} 
+${CERES_LIBRARIES} 
+)
 
 add_executable(main main.cpp)
-target_link_libraries(main ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Trimesh2_LIB_DIRS} )
+target_link_libraries(main ${PROJECT_NAME})
 
+#add_executable(test_ceres test_ceres.cpp)
+#target_link_libraries(test_ceres ${PROJECT_NAME})
 
+#add_executable(test_sh test_sh.cpp)
+#target_link_libraries(test_sh ${PROJECT_NAME})
 
-add_executable(voronoi voronoi.cpp)
-target_link_libraries(voronoi ${OpenCV_LIBS} ${CERES_LIBRARIES} ${Trimesh2_LIB_DIRS} ${PROJECT_NAME})
+#add_executable(test_voronoi test_voronoi.cpp)
+#target_link_libraries(test_voronoi ${PROJECT_NAME})

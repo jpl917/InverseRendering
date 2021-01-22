@@ -5,16 +5,15 @@
 #include <assert.h>
 #endif
 
-#include "utils.h"
-#include "render.h"
+#include "render_utils.h"
 #include "median_cut.h"
+#include "visualizer.h"
 
 using namespace std;
 
 
 int main(){
     
-   
     // 1. load mesh
     trimesh::TriMesh* themesh = trimesh::TriMesh::read("../maya_render/model.obj");
     std::vector<trimesh::point> verts = themesh->vertices;
@@ -42,8 +41,8 @@ int main(){
     
     // median_cut 
     std::vector<float3> lights_pos;
-    std::vector<float3> lights_color;
-    estimate_light_source("../maya_render/env_map/env-log.jpg", lights_pos, lights_color);  //outdoor.hdr
+    std::vector<float3> lights_color;  // color: bgr
+    estimate_light_source("../maya_render/env_map/env-log.jpg", lights_pos, lights_color, 8);  //outdoor.hdr
     //return 0;
     
     
@@ -52,13 +51,12 @@ int main(){
     // render view params
     int img_h = 1920;
     int img_w = 1080;
-    int img_c = 3;
 
 
     // calcuate the tangent space matrix for each face 
     // to fuse displacement map
     std::vector<Eigen::Matrix3d> vertex_TBN;   // not use
-    std::vector<Eigen::Matrix3d> face_TBN;     //TBN matrix for each face
+    std::vector<Eigen::Matrix3d> face_TBN;     // TBN matrix for each face
     std::vector<Eigen::Matrix3d> face_TBN_norm;// T.norm, B.norm 
     calculateTBN(themesh, textureCoordinates, textureIndices, vertex_TBN, face_TBN, face_TBN_norm);
     
@@ -69,13 +67,15 @@ int main(){
      * ************************************************/
     cv::Mat normal_map   = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
     cv::Mat position_map = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
-    render_normal_position(themesh, textureCoordinates, vertexIndices, textureIndices,texture_size, texture_size, 3,  
-                        normal_map, position_map);
+    cv::Mat triangle_idx_map = cv::Mat(texture_size, texture_size, CV_32FC1, -1.0);
+    RenderUtil::render_normal_position(themesh, textureCoordinates, vertexIndices, textureIndices, 
+                                       texture_size, texture_size, 3,  
+                                       normal_map, position_map, triangle_idx_map);
     
     //cv::imwrite("render/normal_map.exr", normal_map);
     //cv::imwrite("render/position_map.exr", position_map);
-    //visualize_normal_map(normal_map, "normal_map.jpg");
-    //visualize_position_map(position_map, "position_map.jpg");
+    //Visualizer::visualize_normal_map(normal_map, "normal_map.jpg");
+    //Visualizer::visualize_position_map(position_map, "position_map.jpg");
     
     
     
@@ -92,30 +92,50 @@ int main(){
         
         // depth map
         cv::Mat depth_img;
-        render_depth(themesh, cam_P[view_idx], img_h, img_w, depth_img);
-        //visualize_depth_map(depth_img, "render/depth_"+view_idx_str+".jpg");
-        
+        RenderUtil::render_depth(themesh, cam_P[view_idx], img_h, img_w, depth_img);
+        //Visualizer::visualize_depth_map(depth_img, "render/depth_"+view_idx_str+".jpg");
         
         // convert image to texture space
         cv::Mat image_view_space = cv::imread("../maya_render/Image/inverse_rendering_1_"+view_idx_str+".png", cv::IMREAD_UNCHANGED);
-        cv::Mat image_texture_space;
-        render_texture_from_view(themesh, vertexCoordinates, textureCoordinates, vertexIndices, textureIndices,
-                                cam_P[view_idx], depth_img, image_view_space, texture_size, image_texture_space);
-        //cv::imwrite("render/image_texture_space_"+view_idx_str+".jpg", image_texture_space);
+        cv::Mat image_texture_space, mask_texture_space;
+        RenderUtil::convert_view_space_to_texture_space(
+                                themesh, vertexCoordinates, textureCoordinates, vertexIndices, textureIndices,
+                                cam_P[view_idx], depth_img, image_view_space, texture_size, 
+                                image_texture_space, mask_texture_space);
+        cv::imwrite("render/image_texture_space_"+view_idx_str+".jpg", image_texture_space);
         
         
         /**************************************************
         * render single view
         * ***********************************************/
-        cv::Mat render_result;
-        //cv::Mat normal_map_detailed = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
-        render_image(themesh, textureCoordinates, textureIndices, cam_P[view_idx], face_TBN, face_TBN_norm,
-                    diff_albedo, spec_albedo, roughness_map, displacement_map, 
-                    lights_pos, lights_color,
-                    img_h, img_w, img_c, render_result);
+//         cv::Mat render_result;
+// //         //cv::Mat normal_map_detailed = cv::Mat::zeros(texture_size, texture_size, CV_32FC3);
+//         RenderUtil::render_image_view_space(themesh, textureCoordinates, textureIndices, cam_P[view_idx], face_TBN, face_TBN_norm,
+//                     diff_albedo, spec_albedo, roughness_map, displacement_map, 
+//                     lights_pos, lights_color,
+//                     img_h, img_w, img_c, render_result);
+//         
+//         Visualizer::visualize_render_image(render_result, "render/render_"+view_idx_str+".jpg");
+        //cv::imwrite("render/render_"+view_idx_str+"_origin.jpg", image_view_space);
         
-        visualize_render_image(render_result, "render/render_"+view_idx_str+".jpg");
-        cv::imwrite("render/render_"+view_idx_str+"_origin.jpg", image_view_space);
+        
+        cv::Mat render_result_texture;
+        RenderUtil::render_image_texture_space( face_TBN, face_TBN_norm,
+                                    normal_map, triangle_idx_map, mask_texture_space, 
+                                    diff_albedo, spec_albedo, roughness_map, displacement_map, 
+                                    lights_pos, lights_color,
+                                    texture_size, render_result_texture);
+                              
+        Visualizer::visualize_render_image(render_result_texture, "render1/render_" + view_idx_str + ".jpg");
+        
+        
+        
+        
+//         RenderUtil::render_image_view_space(themesh, textureCoordinates, textureIndices, cam_P[view_idx],
+//                  render_result_texture, img_h, img_w, img_c, render_result);
+//         
+//         visualize_render_image(render_result, "render/render_"+view_idx_str+"_1.jpg");
+        
     }
     
     

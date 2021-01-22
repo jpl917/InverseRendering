@@ -1,3 +1,5 @@
+#ifndef MEDIAN_CUT_H
+#define MEDIAN_CUT_H
 /*
  * median_cut
  *
@@ -31,8 +33,6 @@
 // A Median Cut Algorithm for Light Probe Sampling
 // http://gl.ict.usc.edu/Research/MedianCut/
 
-#ifndef MEDIAN_CUT_H
-#define MEDIAN_CUT_H
 
 #include <iostream>
 #include <cstdio>
@@ -50,20 +50,10 @@
 //#include <opencv2/imgproc/imgproc.hpp>
 //#include <opencv2/features2d/features2d.hpp>
 
+#include "headers.h"
+
 using namespace std;
 
-
-struct float2
-{
-    float x, y;
-};
-
-struct float3
-{
-    float x, y, z;
-    float3():x(0.), y(0.), z(0.){}
-    float3(float _x, float _y, float _z): x(_x), y(_y), z(_z){}
-};
 
 template<typename T>
 float luminance(T r, T g, T b)
@@ -371,9 +361,9 @@ void calculate_light_color(float* rgba, int width, int height,
                 
                 if (ci < 0 || ci > m) continue;
                 
-                lights_color[i].x += rgba[ci+0];
+                lights_color[i].x += rgba[ci+2];
                 lights_color[i].y += rgba[ci+1];
-                lights_color[i].z += rgba[ci+2];
+                lights_color[i].z += rgba[ci+0];
             }
         }
         
@@ -387,7 +377,7 @@ void calculate_light_color(float* rgba, int width, int height,
         for(size_t p = 0; p < regions[i].h_; p++){
             for(size_t q = 0; q < regions[i].w_; q++){
                 lights_color_viz.at<cv::Vec3f>(regions[i].y_ + p, regions[i].x_ + q) = cv::Vec3f(
-                                                            lights_color[i].z, lights_color[i].y, lights_color[i].x);
+                                                            lights_color[i].x, lights_color[i].y, lights_color[i].z);
             }
         }
         
@@ -446,7 +436,8 @@ float3 sph2cart(double azimuth, double elevation, double radius){
 
 int estimate_light_source(const std::string& filename, 
                           std::vector<float3>& lights_pos, 
-                          std::vector<float3>& lights_color) 
+                          std::vector<float3>& lights_color,
+                          const int& n = 8) 
 {
     cout<<"median_cut: "<<filename<<endl;
     // load image
@@ -484,8 +475,6 @@ int estimate_light_source(const std::string& filename,
     lum_sat.create_lum(rgba, width, height, 4);
 
     // apply median cut
-    int n = 8;
-
     std::vector<sat_region> regions;
     median_cut(lum_sat, n, regions); // max 2^n cuts
 
